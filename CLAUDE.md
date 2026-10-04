@@ -62,9 +62,9 @@ before it is added.
   Any platform behaviour the provider depends on — status codes, which fields a
   response omits, how a missing field is treated on update — has to be mirrored
   in the fake, or the tests prove behaviour the real API does not have.
-- **Secret creation is rate-limited per IP** (10 per 10 minutes) by the
-  platform's `credentialCreationLimiter`, so an apply creating many secrets
-  stops partway. That is the platform's limit, not something to retry around.
+- **Secret creation is rate-limited per project** (100 per 10 minutes) by the
+  platform's `secretCreationLimiter`, so an apply creating more than that stops
+  partway. That is the platform's limit, not something to retry around.
 
 ## Checks
 
