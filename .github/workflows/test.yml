@@ -1,0 +1,123 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to a PR makes the in-flight run irrelevant.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+
+  # docs/ is what the Terraform Registry publishes, generated from the schema
+  # descriptions and examples/. Editing either without regenerating would ship
+  # stale documentation.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+
+      - name: Check docs are current
+        run: |
+          go generate ./...
+          if [ -n "$(git status --porcelain -- docs)" ]; then
+            git status --porcelain -- docs
+            git diff -- docs
+            echo "::error::docs/ is out of date. Run 'go generate ./...' and commit the result."
+            exit 1
+          fi
+        env:
+          CHECKPOINT_DISABLE: "1"
+
+  # The tests drive a real terraform binary against an in-process fake of the
+  # API, so they need no credentials.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.5 is the oldest release still in wide use; the write-only secret
+        # tests skip themselves there, which proves the rest works without them.
+        terraform-version: ["1.5.*", "latest"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # The wrapper is off because it mangles the output the tests parse.
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ matrix.terraform-version }}
+          terraform_wrapper: false
+
+      - name: Test
+        run: go test ./...
+        env:
+          CHECKPOINT_DISABLE: "1"
+
+  # The same build the release runs, minus the signature, so a broken
+  # .goreleaser.yml fails here rather than on a tag.
+  release-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean --skip=sign
+
+  # Single required check for branch protection.
+  ci:
+    if: always()
+    needs: [lint, docs, test, release-build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify no job failed
+        run: |
+          if echo '${{ join(needs.*.result, ',') }}' | grep -qE 'failure|cancelled|skipped'; then
+            echo "One or more jobs did not pass."
+            exit 1
+          fi
+          echo "All jobs passed."
