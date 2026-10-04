@@ -73,8 +73,9 @@ func (r *secretResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"Set the value with `value_wo` on Terraform 1.11 and later to keep it out of state entirely; " +
 			"`value` works everywhere but is stored in state, marked sensitive.\n\n" +
 			"Needs `secrets:read` and `secrets:write`, and a key belonging to an owner or admin of the project. " +
-			"The API allows 10 secret creations per 10 minutes from one IP address, so an apply that creates more " +
-			"stops at a rate-limit error; applying again later carries on from there.",
+			"The API allows 100 secret creations per project every 10 minutes, shared by every key and machine " +
+			"working on the project; an apply that creates more stops at a rate-limit error, and applying again " +
+			"after the window resets carries on from there.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Secret ID.",

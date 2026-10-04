@@ -6,7 +6,7 @@ description: |-
   An encrypted project secret.
   The API never returns a secret's value after setting it, so the provider cannot read it back. It notices a value changed outside Terraform from the secret's version, and sets the configured value again on the next apply.
   Set the value with value_wo on Terraform 1.11 and later to keep it out of state entirely; value works everywhere but is stored in state, marked sensitive.
-  Needs secrets:read and secrets:write, and a key belonging to an owner or admin of the project. The API allows 10 secret creations per 10 minutes from one IP address, so an apply that creates more stops at a rate-limit error; applying again later carries on from there.
+  Needs secrets:read and secrets:write, and a key belonging to an owner or admin of the project. The API allows 100 secret creations per project every 10 minutes, shared by every key and machine working on the project; an apply that creates more stops at a rate-limit error, and applying again after the window resets carries on from there.
 ---
 
 # cosmoner_secret (Resource)
@@ -17,7 +17,7 @@ The API never returns a secret's value after setting it, so the provider cannot 
 
 Set the value with `value_wo` on Terraform 1.11 and later to keep it out of state entirely; `value` works everywhere but is stored in state, marked sensitive.
 
-Needs `secrets:read` and `secrets:write`, and a key belonging to an owner or admin of the project. The API allows 10 secret creations per 10 minutes from one IP address, so an apply that creates more stops at a rate-limit error; applying again later carries on from there.
+Needs `secrets:read` and `secrets:write`, and a key belonging to an owner or admin of the project. The API allows 100 secret creations per project every 10 minutes, shared by every key and machine working on the project; an apply that creates more stops at a rate-limit error, and applying again after the window resets carries on from there.
 
 ## Example Usage
 
