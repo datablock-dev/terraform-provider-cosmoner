@@ -147,6 +147,10 @@ func (p *cosmonerProvider) Resources(_ context.Context) []func() resource.Resour
 		newWebhookEndpointResource,
 		newSSHKeyResource,
 		newResourceGroupResource,
+		newAppResource,
+		newPostgresDatabaseResource,
+		newRedisDatabaseResource,
+		newBucketResource,
 	}
 }
 

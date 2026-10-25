@@ -136,3 +136,30 @@ func stringPointer(value types.String) *string {
 	s := value.ValueString()
 	return &s
 }
+
+// optionalInt64 maps an absent or null API number to a null attribute.
+func optionalInt64(value *int64) types.Int64 {
+	if value == nil {
+		return types.Int64Null()
+	}
+	return types.Int64Value(*value)
+}
+
+// int64Pointer is the inverse for request bodies: nil for null or unknown.
+func int64Pointer(value types.Int64) *int64 {
+	if value.IsNull() || value.IsUnknown() {
+		return nil
+	}
+	v := value.ValueInt64()
+	return &v
+}
+
+// computedString is a read-only attribute that keeps its prior value through
+// a plan, for attributes the API sets at creation and an update leaves alone.
+func computedString(description string) schema.StringAttribute {
+	return schema.StringAttribute{
+		MarkdownDescription: description,
+		Computed:            true,
+		PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+	}
+}
