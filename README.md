@@ -127,18 +127,45 @@ writes `SHA256SUMS` and the Registry manifest, signs the checksums with GPG and
 attaches everything to a GitHub release. The Terraform Registry picks the
 release up from there.
 
+A tag whose release job failed does not need a new tag: once the cause is
+fixed, re-run the job from the Actions tab and it builds the tagged commit
+again.
+
 Tags follow semantic versioning, and the Registry treats them as the
 provider's version: a breaking schema change (a removed attribute, a renamed
 resource, a new required argument) is a major version.
 
 ### One-time setup
 
-- A GPG key whose private half and passphrase are stored in this repository's
-  Actions secrets as `GPG_PRIVATE_KEY` and `PASSPHRASE`. The release signs with
-  it, and the Registry rejects a release whose signature it cannot verify.
-- The provider published on [registry.terraform.io](https://registry.terraform.io/publish/provider)
-  under the `datablock-dev` namespace, with that key's public half added to the
-  namespace's signing keys.
+Nothing is published until all of this is done. The `v0.1.0` tag was pushed
+before it was, and its release job stopped at the GPG import, so no GitHub
+release and nothing on the Registry came of it.
+
+1. Generate an **RSA** signing key (the Registry does not accept ECC keys) and
+   export both halves:
+
+   ```bash
+   gpg --full-generate-key                # RSA and RSA, 4096 bits
+   gpg --armor --export-secret-keys <fingerprint> > private.asc
+   gpg --armor --export <fingerprint> > public.asc
+   ```
+
+2. Add the private half and its passphrase as Actions secrets on this
+   repository: `GPG_PRIVATE_KEY` (the whole of `private.asc`) and `PASSPHRASE`.
+   The release job checks for the key first and says so when it is missing.
+3. Sign in to [registry.terraform.io](https://registry.terraform.io) with
+   GitHub and allow it access to the `datablock-dev` organization. If the
+   organization restricts third-party OAuth apps, an owner has to approve the
+   Terraform Registry under the organization's OAuth app policy first, or the
+   namespace never appears.
+4. Under **User Settings → Signing Keys**, add `public.asc` to the
+   `datablock-dev` namespace. The Registry verifies every release's
+   `SHA256SUMS.sig` against it.
+5. Cut a release (above) and check that the GitHub release carries the zips,
+   `…_SHA256SUMS`, `…_SHA256SUMS.sig` and `…_manifest.json`.
+6. **Publish → Provider**, choose `datablock-dev/terraform-provider-cosmoner`.
+   The Registry ingests the existing releases and installs a webhook, so every
+   later tag is picked up without visiting it again.
 
 `source = "datablock-dev/cosmoner"` and `registryAddress` in `main.go` both
 follow from the namespace. Publishing from another one changes both.
