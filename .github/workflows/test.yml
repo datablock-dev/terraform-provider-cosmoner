@@ -106,7 +106,27 @@ jobs:
       - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
+          args: check
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
           args: release --snapshot --clean --skip=sign
+
+      # The Registry ingests a release only when these exact names are among
+      # its assets, and nothing else checks them before a tag is pushed. The
+      # manifest is uploaded from the repository by the release step, which a
+      # snapshot skips, so here it can only be checked through its checksum.
+      - name: Check the Registry's files are produced
+        run: |
+          version=$(jq -r .version dist/metadata.json)
+          prefix="terraform-provider-cosmoner_${version}"
+          for f in "${prefix}_SHA256SUMS" "${prefix}_linux_amd64.zip" "${prefix}_darwin_arm64.zip"; do
+            [ -f "dist/$f" ] || { echo "::error::missing $f"; ls dist; exit 1; }
+          done
+          manifest="$(sha256sum terraform-registry-manifest.json | cut -d' ' -f1)  ${prefix}_manifest.json"
+          grep -qxF "$manifest" "dist/${prefix}_SHA256SUMS" || { echo "::error::SHA256SUMS does not cover ${prefix}_manifest.json"; exit 1; }
+          unzip -l "dist/${prefix}_linux_amd64.zip" | grep -q " terraform-provider-cosmoner_v${version}$" || { echo "::error::the archive does not hold terraform-provider-cosmoner_v${version}"; exit 1; }
 
   # Single required check for branch protection.
   ci:

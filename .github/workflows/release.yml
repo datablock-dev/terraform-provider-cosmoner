@@ -24,6 +24,18 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # Without the key the import below stops at "Input required and not
+      # supplied: gpg_private_key", which is how the v0.1.0 tag failed to
+      # produce a release. Fail with the fix instead.
+      - name: Check the signing key is configured
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "::error::The GPG_PRIVATE_KEY Actions secret is not set, so the release cannot be signed and the Terraform Registry would reject it. Add the ASCII-armored private key as GPG_PRIVATE_KEY (and its passphrase as PASSPHRASE), then re-run this job. See README > Releasing."
+            exit 1
+          fi
+
       # The Registry verifies SHA256SUMS against a public key registered on
       # the namespace, so this has to be that key's private half.
       - uses: crazy-max/ghaction-import-gpg@v7

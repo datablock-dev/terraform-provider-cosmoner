@@ -4,6 +4,11 @@
 # https://developer.hashicorp.com/terraform/registry/providers/publishing
 version: 2
 
+# Pinned rather than derived from the checkout directory or the remote: every
+# file name below is built from it, and the Registry only ingests assets named
+# terraform-provider-<name>_<version>_… for the repository it was published from.
+project_name: terraform-provider-cosmoner
+
 before:
   hooks:
     - go mod tidy
@@ -22,6 +27,10 @@ builds:
     ignore:
       - goos: darwin
         goarch: "386"
+      # 32-bit Windows on ARM is a port Go marks broken and removes in 1.26,
+      # and Terraform itself ships no build for it.
+      - goos: windows
+        goarch: arm
     binary: "{{ .ProjectName }}_v{{ .Version }}"
 
 archives:
