@@ -21,10 +21,44 @@ Only wrap endpoints that carry an API-key scope; `API_KEY_RESOURCES` in the
 platform repo (`packages/schemas/src/api-key-scopes.ts`) is the list. An
 endpoint with no scope is dashboard-only.
 
-Billable resources (apps, servers, databases, Redis, storage) are deliberately
-not in yet. They provision asynchronously and bill from creation, so each needs
-a decision on what `apply` waits for and what a failed provision leaves behind
-before it is added.
+### Billable resources
+
+`cosmoner_app`, `cosmoner_postgres_database`, `cosmoner_redis_database` and
+`cosmoner_bucket` bill from creation and provision asynchronously. They share
+one set of rules, implemented in `internal/provider/billable.go`; a new
+billable resource follows them rather than inventing its own:
+
+- **`apply` waits until the resource is ready**, polling its status
+  (`RUNNING`, `ONLINE`, `ACTIVE`) every `pollInterval` until a `timeouts`
+  block's `create` deadline. Each resource sets a default that fits how long
+  it takes. Delete waits too, until the API answers 404 or, for databases and
+  Redis whose rows are kept, `TERMINATED`.
+- **A create the API refuses leaves nothing behind.** Every create route rolls
+  back its own side effects before answering with a 4xx, so the provider
+  reports the error and stores nothing.
+- **A resource that was created but did not become ready is tainted, never
+  deleted by the provider.** An error status or a deadline is reported as an
+  error after the resource is saved to state, so Terraform taints it and the
+  next apply replaces it. Deleting it ourselves was rejected: a destroy should
+  show in a plan, a timed-out resource may yet come up, a failed one keeps its
+  logs, and a delete that itself fails would need the taint anyway.
+- **An unknown outcome is resolved before giving up.** When the create request
+  gets no answer or a 5xx, the provider looks for the resource and adopts it,
+  so nothing billed exists outside state.
+- **Database, Redis and bucket creates return no id.** The provider finds the
+  new resource by listing: buckets by their unique name, databases and Redis
+  by name among the ids that were not there before the create.
+- **What the API cannot change, replaces.** There is no resize route for
+  databases or Redis, and no route for an app's source or a bucket's
+  versioning, so those arguments carry `RequiresReplace` and their docs say
+  the data goes with it.
+- **Catalogue values (sizes, plans, regions, versions) are not validated**:
+  they change without a provider release. Name patterns, ports, CORS methods
+  and public path shapes are stable rules and are.
+
+Not in yet: servers and shared hosting (separate scopes, own provisioning
+flows), app environment variables (the API masks secret ones on read, so they
+need a design for drift), custom domains, and private registry credentials.
 
 ## Conventions
 
@@ -61,7 +95,10 @@ before it is added.
 - **The tests run real Terraform against `internal/provider/fake_api_test.go`.**
   Any platform behaviour the provider depends on — status codes, which fields a
   response omits, how a missing field is treated on update — has to be mirrored
-  in the fake, or the tests prove behaviour the real API does not have.
+  in the fake, or the tests prove behaviour the real API does not have. The
+  billable routes are in `fake_api_billable_test.go`, whose header lists what
+  they mirror; resource names containing `broken`, `stuck` or `flaky` make it
+  fail a provision, never finish one, or lose the create's answer.
 - **Secret creation is rate-limited per project** (100 per 10 minutes) by the
   platform's `secretCreationLimiter`, so an apply creating more than that stops
   partway. That is the platform's limit, not something to retry around.

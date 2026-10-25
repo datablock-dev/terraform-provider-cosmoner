@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -38,6 +37,9 @@ type fakeAPI struct {
 	groups    map[string]map[string]any
 	// owner maps every resource id to the project it lives in.
 	owner map[string]string
+
+	// Billable resources. See fake_api_billable_test.go.
+	billable
 }
 
 type fakeSecret struct {
@@ -59,13 +61,12 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 		sshKeys:   map[string]map[string]any{},
 		groups:    map[string]map[string]any{},
 		owner:     map[string]string{},
+		billable:  newBillable(),
 	}
 	f.server = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.server.Close)
 	return f
 }
-
-var routePattern = regexp.MustCompile(`^/v1/projects/([^/]+)(?:/([a-z-]+))?(?:/([^/]+))?$`)
 
 func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
@@ -76,19 +77,15 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m := routePattern.FindStringSubmatch(r.URL.Path)
-	if m == nil {
+	rest, ok := strings.CutPrefix(r.URL.Path, "/v1/projects/")
+	if !ok || rest == "" {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Route not found")
 		return
 	}
-	projectID, collection, id := m[1], m[2], m[3]
+	segments := strings.Split(rest, "/")
+	projectID, segments := segments[0], segments[1:]
 	if _, ok := f.projects[projectID]; !ok {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Project not found")
-		return
-	}
-	// An id from another project is as invisible as one that does not exist.
-	if id != "" && f.owner[id] != projectID {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "Not found")
 		return
 	}
 
@@ -100,9 +97,40 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	switch collection {
-	case "":
+	if len(segments) == 0 {
 		writeData(w, http.StatusOK, f.projects[projectID])
+		return
+	}
+
+	switch {
+	case segments[0] == "apps":
+		f.serveApps(w, r.Method, projectID, segments[1:], body)
+		return
+	case segments[0] == "databases" && len(segments) > 1 && segments[1] == "dedicated":
+		f.serveDatabases(w, r.Method, projectID, segments[2:], body)
+		return
+	case segments[0] == "redis":
+		f.serveRedis(w, r.Method, projectID, segments[1:], body)
+		return
+	case segments[0] == "storage" && len(segments) > 1 && segments[1] == "object-storage":
+		f.serveBuckets(w, r.Method, projectID, segments[2:], body)
+		return
+	case len(segments) > 2:
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Route not found")
+		return
+	}
+
+	collection, id := segments[0], ""
+	if len(segments) == 2 {
+		id = segments[1]
+	}
+	// An id from another project is as invisible as one that does not exist.
+	if id != "" && f.owner[id] != projectID {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Not found")
+		return
+	}
+
+	switch collection {
 	case "secrets":
 		f.serveSecrets(w, r.Method, projectID, id, body)
 	case "variables":
@@ -370,7 +398,7 @@ func (f *fakeAPI) deleteAllVariables() {
 func (f *fakeAPI) count() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return len(f.secrets) + len(f.variables) + len(f.webhooks) + len(f.sshKeys) + len(f.groups)
+	return len(f.secrets) + len(f.variables) + len(f.webhooks) + len(f.sshKeys) + len(f.groups) + f.billableCount()
 }
 
 func (f *fakeAPI) newID(prefix, projectID string) string {

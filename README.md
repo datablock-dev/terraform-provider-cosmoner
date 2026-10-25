@@ -48,16 +48,29 @@ A value set in the provider block wins over the environment.
 | `cosmoner_webhook_endpoint` | resource    | `webhooks:read`, `webhooks:write`                |
 | `cosmoner_ssh_key`          | resource    | `servers:read`, `servers:write`                  |
 | `cosmoner_resource_group`   | resource    | `projects:read`, `projects:write`                |
+| `cosmoner_app`              | resource    | `apps:read`, `apps:write`                        |
+| `cosmoner_postgres_database` | resource   | `databases:read`, `databases:write`              |
+| `cosmoner_redis_database`   | resource    | `redis:read`, `redis:write`                      |
+| `cosmoner_bucket`           | resource    | `object-storage:read`, `object-storage:write`    |
 | `cosmoner_project`          | data source | `projects:read`                                  |
 
 Every resource takes an optional `project_id` that overrides the provider's,
 and imports as `<project_id>/<id>`, or as a bare `<id>` when the provider has a
 default project. [`docs/`](./docs) has the full reference for each one.
 
-The first release covers configuration that costs nothing to create. Apps,
-servers, databases, Redis and storage come next: each is billed from the moment
-it exists and provisions asynchronously, so they need a deliberate design for
-what `apply` waits on and what a failed provision leaves behind.
+### Billable resources
+
+Apps, PostgreSQL databases, Redis databases and buckets are charged to the
+project's saved card from the moment they exist. `apply` waits until each one
+is ready, up to the `create` time in its `timeouts` block. One that fails to
+become ready, or is still starting at the deadline, stays in state as
+**tainted**: the next apply replaces it, and `terraform destroy` removes it.
+The provider never deletes it on its own, so a failed deploy's logs are still
+there to read. A create the API refuses leaves nothing behind.
+
+Databases and Redis have no resize route, so changing their size or plan
+replaces them, data included. Use `lifecycle { prevent_destroy = true }` on
+anything holding data you care about.
 
 ### Secrets
 
