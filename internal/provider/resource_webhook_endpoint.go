@@ -84,7 +84,7 @@ func (r *webhookEndpointResource) Schema(_ context.Context, _ resource.SchemaReq
 			// Not validated against a list: the API owns the event vocabulary, and
 			// a new event should not need a provider release to subscribe to.
 			"events": schema.SetAttribute{
-				MarkdownDescription: "Event types to deliver, e.g. `app.deployed`, `email.bounced`, `domain.verified`. " +
+				MarkdownDescription: "Event types to deliver, e.g. `app.deployed`, `app.failed`, `email.bounced`. " +
 					"See the webhooks documentation for the full list.",
 				Required:    true,
 				ElementType: types.StringType,

@@ -37,7 +37,7 @@ resource "cosmoner_secret" "webhook_signing_secret" {
 
 ### Required
 
-- `events` (Set of String) Event types to deliver, e.g. `app.deployed`, `email.bounced`, `domain.verified`. See the webhooks documentation for the full list.
+- `events` (Set of String) Event types to deliver, e.g. `app.deployed`, `app.failed`, `email.bounced`. See the webhooks documentation for the full list.
 - `name` (String) Display name.
 - `url` (String) Where events are delivered. Must be HTTPS.
 
